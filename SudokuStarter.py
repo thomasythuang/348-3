@@ -9,6 +9,8 @@ class SudokuBoard:
       """the constructor for the SudokuBoard"""
       self.BoardSize = size #the size of the board
       self.CurrentGameBoard= board #the current state of the game board
+      #a 2-d array of legal moves for each possible board space
+      self.legalMoves = [[[k+1 for k in range(size)] for i in range(size)] for j in range(size)]
 
     def set_value(self, row, col, value):
         """This function will create a new sudoku board object with the input
@@ -18,8 +20,7 @@ class SudokuBoard:
         self.CurrentGameBoard[row][col]=value
         #return a new board of the same size with the value added
         return SudokuBoard(self.BoardSize, self.CurrentGameBoard)
-                                                                  
-                                                                  
+                                                                                                                 
     def print_board(self):
         """Prints the current game board. Leaves unassigned spots blank."""
         div = int(math.sqrt(self.BoardSize))
@@ -111,7 +112,15 @@ def is_complete(sudoku_board):
 def init_board(file_name):
     """Creates a SudokuBoard object initialized with values from a text file"""
     board = parse_file(file_name)
-    return SudokuBoard(len(board), board)
+    sb = SudokuBoard(len(board), board)
+
+    #when the board is initialized with starting numbers,
+    #remove the potential values that they already eliminate
+    for row in range(sb.BoardSize):
+    	for col in range(sb.BoardSize):
+    		removeMoves(sb, row, col, sb.CurrentGameBoard[row][col])
+
+    return sb
 
 def solve(initial_board, forward_checking = False, MRV = False, MCV = False,
     LCV = False):
@@ -121,26 +130,51 @@ def solve(initial_board, forward_checking = False, MRV = False, MCV = False,
 
     board = initial_board
 
+    # If the puzzle is complete, return!
     if is_complete(board):
     	return board
 
-    row, col = findOpenSpace(board)
+    # Get the position of an open space on the board
+    row, col = findOpenSpace(board, MRV, MCV)
 
-    for n in range(board.BoardSize):
+    # Get the list of legal moves for that spot
+    if forward_checking:
+    	nums = board.legalMoves[row][col]
+    	
+    	# Sort the moves based on the least constraining values
+    	if LCV:
+    		nums = findConstraints(board, row, col, nums)
+
+    # If no forward checking, just use 1-9
+    else:
+    	nums = range(board.BoardSize)
+    	nums = [x+1 for x in nums]
+
+    # Try a value and backtrack if it doesn't work out
+    for n in nums:
     	nb = deepcopy(board)
-    	if checkRow(nb, row, n+1) and checkColumn(nb, col, n+1) and checkSmallBox(nb, row, col, n+1):
-    		nb.set_value(row, col, (n+1))
+    	if checkRow(nb, row, n) and checkColumn(nb, col, n) and checkSmallBox(nb, row, col, n):
+    		nb.set_value(row, col, n)
+    		removeMoves(nb, row, col, n)
     		res = solve(nb, forward_checking, MRV, MCV, LCV)
     		if res:
     			return res
-
     return False
 
-def findOpenSpace(board):
+def findOpenSpace(board, MRV, MCV):
 	"""Finds an open space in a board and returns its coordinates"""
 	size = board.BoardSize
 	gb = board.CurrentGameBoard
+	"""
+	# MRV (If MRV and MCV are both selected, MRV will be selected by default)
+	if MRV:
 
+
+	# MCV
+	if MCV:
+
+	else: """
+	# If no MRV or MCV, choose the most top-left open space
 	for row in range(size):
 		for col in range(size):
 			if (gb[row][col] == 0):
@@ -148,6 +182,69 @@ def findOpenSpace(board):
 
 	return False
 
+def findConstraints(board, rowNum, colNum, moves):
+	"""Finds how many choices a value affects for LCV"""
+	# List to keep track of how many choices a move affects
+	constraints = [0]*len(moves)
+
+	size = int(math.sqrt(board.BoardSize))
+
+	# Set rowIndex and colIndex to the top left of the appropriate small box
+	for n in range(size):
+		if (rowNum < ((n+1) * size)):
+			rowIndex = n * size
+			break
+	for n in range(size):
+		if (colNum < ((n+1) * size)):
+			colIndex = n * size
+			break
+
+	# Track affected vertical & horizontal spaces
+	for move in moves:
+		for i in range(board.BoardSize):
+			if move in board.legalMoves[i][colNum]:
+				constraints[moves.index(move)] += 1
+			if move in board.legalMoves[rowNum][i]:
+				constraints[moves.index(move)] += 1
+
+		# Track affected spaces in the same small square
+		for row in range(size):
+			for col in range(size):
+				if (rowIndex+row != rowNum) and (colIndex+col != colNum):
+					if move in board.legalMoves[rowIndex+row][colIndex+col]:
+						constraints[moves.index(move)] += 1
+
+	newMoves = [x for (y,x) in sorted(zip(constraints, moves))]
+	return newMoves
+
+def removeMoves(board, rowNum, colNum, val):
+	"""Removes the given value from the eligible moves for any spaces
+	in the same row, column, or small square"""
+
+	# Remove the value from the legal moves in the same row/column
+	for i in range(board.BoardSize):
+		if val in board.legalMoves[i][colNum]:
+			board.legalMoves[i][colNum].remove(val)
+		if val in board.legalMoves[rowNum][i]:
+			board.legalMoves[rowNum][i].remove(val)
+
+	size = int(math.sqrt(board.BoardSize))
+
+	# Set rowIndex and colIndex to the top left of the appropriate small box
+	for n in range(size):
+		if (rowNum < ((n+1) * size)):
+			rowIndex = n * size
+			break
+	for n in range(size):
+		if (colNum < ((n+1) * size)):
+			colIndex = n * size
+			break
+
+	# Remove the value from the legal moves in the same small square
+	for row in range(size):
+		for col in range(size):
+			if val in board.legalMoves[rowIndex+row][colIndex+col]:
+				board.legalMoves[rowIndex+row][colIndex+col].remove(val)
 
 def checkRow(board, rowNum, val):
 	"""Checks a row for the given value and returns false if it exists"""
@@ -190,3 +287,14 @@ def checkSmallBox(board, rowNum, colNum, val):
 				return False
 
 	return True
+
+def test():
+	b = init_board('4_4.sudoku')
+	b2 = solve(b, True, False, False, True)
+	b.print_board()
+	b2.print_board()
+
+	bb = init_board('9_9.sudoku')
+	bb.print_board()
+	bb2 = solve(bb, True, False, False, True)
+	bb2.print_board()
