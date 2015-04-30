@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import struct, string, math
+import struct, string, math, time
 from copy import *
 
 class SudokuBoard:
@@ -136,7 +136,6 @@ def solve(initial_board, forward_checking = False, MRV = False, MCV = False,
 
     # Get the position of an open space on the board
     row, col = findOpenSpace(board, MRV, MCV)
-
     # Get the list of legal moves for that spot
     if forward_checking:
     	nums = board.legalMoves[row][col]
@@ -165,20 +164,38 @@ def findOpenSpace(board, MRV, MCV):
 	"""Finds an open space in a board and returns its coordinates"""
 	size = board.BoardSize
 	gb = board.CurrentGameBoard
-	"""
+	
 	# MRV (If MRV and MCV are both selected, MRV will be selected by default)
 	if MRV:
-
-
+		minVal = size # The least amount of values remaining for a variable
+		for row in range(size):
+			for col in range(size):
+				if (gb[row][col] == 0):
+					# If this spot has less values than the min, it's the new min
+					if len(board.legalMoves[row][col]) < minVal:
+						minVal = len(board.legalMoves[row][col])
+						minRow = row
+						minCol = col
+		return minRow, minCol
 	# MCV
-	if MCV:
-
-	else: """
-	# If no MRV or MCV, choose the most top-left open space
-	for row in range(size):
-		for col in range(size):
-			if (gb[row][col] == 0):
-				return row, col
+	elif MCV:
+		maxCon = 0 # The most constraints with other variables
+		for row in range(size):
+			for col in range(size):
+				if (gb[row][col] == 0):
+					# If this spot has more constraints than the max, it's the new max
+					con = countConstraints(board, row, col)
+					if con > maxCon:
+						maxCon = con
+						maxRow = row
+						maxCol = col
+		return maxRow, maxCol
+	else: 
+		# If no MRV or MCV, choose the most top-left open space
+		for row in range(size):
+			for col in range(size):
+				if (gb[row][col] == 0):
+					return row, col
 
 	return False
 
@@ -214,8 +231,42 @@ def findConstraints(board, rowNum, colNum, moves):
 					if move in board.legalMoves[rowIndex+row][colIndex+col]:
 						constraints[moves.index(move)] += 1
 
+	# Sort the moves by the least amount of constraints on other variables
 	newMoves = [x for (y,x) in sorted(zip(constraints, moves))]
 	return newMoves
+
+def countConstraints(board, rowNum, colNum):
+	"""Counts how many constraints a variable is involved in with other variables"""
+	
+	gb = board.CurrentGameBoard
+	constraints = 0
+
+	# Count empty spaces in the same row or column
+	for i in range(board.BoardSize):
+		if gb[i][colNum] == 0:
+			constraints += 1
+		if gb[rowNum][i] == 0:
+			constraints += 1
+
+	size = int(math.sqrt(board.BoardSize))
+
+	# Set rowIndex and colIndex to the top left of the appropriate small box
+	for n in range(size):
+		if (rowNum < ((n+1) * size)):
+			rowIndex = n * size
+			break
+	for n in range(size):
+		if (colNum < ((n+1) * size)):
+			colIndex = n * size
+			break
+
+	# Count empty spaces in the same small square
+	for row in range(size):
+		for col in range(size):
+			if (rowIndex+row != rowNum) and (colIndex+col != colNum):
+				if gb[rowIndex+row][colIndex+col] == 0:
+					constraints += 1
+	return constraints
 
 def removeMoves(board, rowNum, colNum, val):
 	"""Removes the given value from the eligible moves for any spaces
@@ -289,12 +340,30 @@ def checkSmallBox(board, rowNum, colNum, val):
 	return True
 
 def test():
-	b = init_board('4_4.sudoku')
-	b2 = solve(b, True, False, False, True)
+
+	#path1 = '4_4.sudoku'
+	#path2 = '9_9.sudoku'
+	path1 = 'input_puzzles/more/9x9/9x9.3.sudoku'
+	path2 = 'input_puzzles/more/9x9/9x9.7.sudoku'
+
+	b = init_board(path1)
 	b.print_board()
+	#t0 = time.clock()
+	b2 = solve(b, True, True, False, False)
+	#print "4x4:", time.clock() - t0, "sec"
 	b2.print_board()
 
-	bb = init_board('9_9.sudoku')
+	bb = init_board(path2)
 	bb.print_board()
-	bb2 = solve(bb, True, False, False, True)
+	#t1 = time.clock()
+	bb2 = solve(bb, True, True, False, False)
+	#print "9x9:", time.clock() - t1, "sec"
 	bb2.print_board()
+	"""
+	bbb = init_board('16_16.sudoku')
+	#bbb.print_board()
+	t2 = time.clock()
+	bbb2 = solve(bbb, True, False, False, True)
+	#print "16x16:", time.clock() - t2, "sec"
+	#bbb2.print_board() 
+	"""
